@@ -28,7 +28,7 @@ public:
 public: // getters
   Mode getMode() const;
   std::string getSatellite() const;
-  std::filesystem::path getImagePath() const;
+  std::filesystem::path getRDASDirectory() const;
   std::filesystem::path outputPath() const;
 
 private:

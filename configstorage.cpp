@@ -11,14 +11,14 @@ Config::Config(const std::filesystem::path& path)
   }
 }
 
-cv::Mat Config::getTransformMatrix(const std::string& satellite, const std::string& channel) {
-  if (mJsonConfig[satellite].isNull() == true) {
-    throw std::runtime_error("Selected satellite '" + satellite + "' config doesn't exist");
+cv::Mat Config::getTransformMatrix(const std::string& index, const std::string& channel) {
+  if (mJsonConfig[index].isNull() == true) {
+    throw std::runtime_error("Selected index '" + index + "' config doesn't exist! Run calibration first?");
   }
 
-  auto satConf = mJsonConfig[satellite];
+  auto satConf = mJsonConfig[index];
   if (satConf[channel].isNull() == true) {
-    throw std::runtime_error("Selected satellite channel '" + channel + "' config doesn't exist");
+    throw std::runtime_error("Selected index channel '" + channel + "' config doesn't exist");
   }
 
   auto channelConf = satConf[channel];

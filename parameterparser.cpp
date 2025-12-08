@@ -2,11 +2,11 @@
 
 
 ParameterParser::ParameterParser() {
-  mSettingsList.push_back(ParameterData("--help", "-h", "Print help"));
+  mSettingsList.push_back(ParameterData("--help", "-h", "Print help")); // TODOREWORK: this is not iplemented
   mSettingsList.push_back(ParameterData("--sat", "-s", "Satellite name"));
   mSettingsList.push_back(ParameterData("--mode", "-m", "calibrate|generate (default:generate)"));
-  mSettingsList.push_back(ParameterData("--image", "-i", "Input image"));
-  mSettingsList.push_back(ParameterData("--outimage", "-o", "Output image"));
+  mSettingsList.push_back(ParameterData("--directory", "-d", "Live input directory"));
+  mSettingsList.push_back(ParameterData("--nc", "-n", "Output NC image (optional)"));
 }
 
 void ParameterParser::parseArgs(int argc, char** argv) {
@@ -66,14 +66,18 @@ std::string ParameterParser::getSatellite() const {
   return sat;
 }
 
-std::filesystem::path ParameterParser::getImagePath() const {
+std::filesystem::path ParameterParser::getRDASDirectory() const {
   std::string path = std::string("");
 
-  if (mArgs.count("-i")) {
-    path = mArgs.at("-i");
+  if (mArgs.count("-d")) {
+    path = mArgs.at("-d");
   }
-  if (mArgs.count("--image")) {
-    path = mArgs.at("--image");
+  if (mArgs.count("--directory")) {
+    path = mArgs.at("--directory");
+  }
+
+  if (path == "") {
+    throw std::runtime_error("You must provide a live-decoded RDAS directory!");
   }
 
   return path;
@@ -82,15 +86,11 @@ std::filesystem::path ParameterParser::getImagePath() const {
 std::filesystem::path ParameterParser::outputPath() const {
   std::string path = std::string("");
 
-  if (mArgs.count("-o")) {
-    path = mArgs.at("-o");
+  if (mArgs.count("-n")) {
+    path = mArgs.at("-n");
   }
-  if (mArgs.count("--outimage")) {
-    path = mArgs.at("--outimage");
-  }
-
-  if (path == "") {
-    throw std::runtime_error("No output path given");
+  if (mArgs.count("--nc")) {
+    path = mArgs.at("--nc");
   }
 
   return path;

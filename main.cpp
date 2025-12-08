@@ -1,4 +1,5 @@
-#include <algorithm>
+#include <filesystem>
+#include <opencv2/core/mat.hpp>
 #include <opencv2/features2d.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
@@ -10,166 +11,17 @@
 #include "imageproc.h"
 #include "opencv2/core/ocl.hpp"
 #include "parameterparser.h"
-#include "tps.h"
+// #include "tps.h"
 
+#define CH2_OFFSET 3606
+#define CH3_OFFSET 1804
+
+enum MSUGS_SIDES { VIS1, VIS2 };
 
 void valuesFromEuclidean(const cv::Mat& warp);
 std::tuple<cv::Mat, cv::Mat> calculateMatrix(cv::Mat reference, cv::Mat ch1, cv::Mat ch2);
 std::tuple<cv::Mat, cv::Mat> loadMatrix(std::filesystem::path ch1Config, std::filesystem::path ch2Config);
 void valuesFromAffine(const cv::Mat& warp, const std::string& prefix);
-
-int main(int argc, char** argv) {
-  cv::ocl::setUseOpenCL(true);
-  if (cv::ocl::useOpenCL()) {
-    std::cout << "OpenCL is enabled!" << std::endl;
-  } else {
-    std::cout << "OpenCL is disabled or not supported." << std::endl;
-  }
-
-  ParameterParser parameters;
-  parameters.parseArgs(argc, argv);
-
-  Config config("./config.json");
-
-  // CH2 is shifted by 1804
-  auto ch2Shift = ImageProc::shiftImageMatrix(0, 1804);
-  // CH3 is shifted by 3606
-  auto ch3Shift = ImageProc::shiftImageMatrix(0, 3606);
-
-  if (parameters.getMode() == ParameterParser::Mode::cCalibrate) {
-    auto imagePath = parameters.getImagePath();
-    if (imagePath == "") {
-      throw std::runtime_error("Image 321 must be given to be able to calibrate channels");
-    }
-
-    cv::Mat rgb = cv::imread(imagePath);
-    std::vector<cv::Mat> channels;
-    cv::split(rgb, channels);
-
-    std::cout << "Calibration begin" << std::endl;
-
-    cv::Mat ch2WarpMatrix = (cv::Mat_<float>(2, 3) << 1, 0, 0, 0, 1, 0);
-    auto ch2thread = std::thread([&]() {
-      cv::Mat ch2Alligned;
-      cv::warpAffine(channels[1], ch2Alligned, ch2Shift, channels[1].size(), cv::INTER_LINEAR + cv::WARP_INVERSE_MAP);
-      ch2WarpMatrix = ImageProc::findMatrix(channels[0], ch2Alligned);
-    });
-
-
-    cv::Mat ch3WarpMatrix = (cv::Mat_<float>(2, 3) << 1, 0, 0, 0, 1, 0);
-    auto ch3thread = std::thread([&]() {
-      cv::Mat ch3Alligned;
-      cv::warpAffine(channels[2], ch3Alligned, ch3Shift, channels[2].size(), cv::INTER_LINEAR + cv::WARP_INVERSE_MAP);
-      ch3WarpMatrix = ImageProc::findMatrix(channels[0], ch3Alligned);
-    });
-
-    ch2thread.join();
-    ch3thread.join();
-
-    // Add the shifts
-    ch2WarpMatrix.at<float>(0, 2) += ch2Shift.at<float>(0, 2);
-    ch2WarpMatrix.at<float>(1, 2) += ch2Shift.at<float>(1, 2);
-    ch3WarpMatrix.at<float>(0, 2) += ch3Shift.at<float>(0, 2);
-    ch3WarpMatrix.at<float>(1, 2) += ch3Shift.at<float>(1, 2);
-
-    std::cout << "Calibration done" << std::endl;
-    valuesFromAffine(ch2WarpMatrix, "CH2 ");
-    valuesFromAffine(ch3WarpMatrix, "CH3 ");
-
-    config.setTransfromMatrix(ch2WarpMatrix, parameters.getSatellite(), "CH2");
-    config.setTransfromMatrix(ch3WarpMatrix, parameters.getSatellite(), "CH3");
-  } else {
-    auto imagePath = parameters.getImagePath();
-    cv::UMat rgb;
-    cv::imread(imagePath).copyTo(rgb);
-    std::vector<cv::UMat> channels;
-    cv::split(rgb, channels);
-    auto outputPath = parameters.outputPath();
-
-    auto warpCh2 = config.getTransformMatrix(parameters.getSatellite(), "CH2");
-    auto warpCh3 = config.getTransformMatrix(parameters.getSatellite(), "CH3");
-
-    valuesFromAffine(warpCh2, "CH2 ");
-    valuesFromAffine(warpCh3, "CH3 ");
-
-    cv::UMat ch2Alligned;
-    cv::UMat ch3Alligned;
-    cv::warpAffine(channels[1], ch2Alligned, warpCh2, channels[1].size(), cv::INTER_LINEAR + cv::WARP_INVERSE_MAP);
-    cv::warpAffine(channels[2], ch3Alligned, warpCh3, channels[2].size(), cv::INTER_LINEAR + cv::WARP_INVERSE_MAP);
-
-    std::vector<cv::UMat> allignedChannels;
-    allignedChannels.push_back(channels[0]);
-    allignedChannels.push_back(ch2Alligned);
-    allignedChannels.push_back(ch3Alligned);
-
-    cv::UMat outputImage;
-    cv::merge(allignedChannels, outputImage);
-
-    cv::imwrite(outputPath, outputImage);
-  }
-  return 0;
-
-  /*
-    cv::UMat rgb;
-    cv::imread("merged2.png").copyTo(rgb);
-    std::vector<cv::UMat> channels;
-    cv::split(rgb, channels);
-
-
-    cv::Mat warp_matrix_ch1 = ImageProc::shiftImageMatrix(0, -1760);
-    cv::Mat warp_matrix_ch2 = ImageProc::shiftImageMatrix(0, -3565);
-    // std::tuple<cv::Mat, cv::Mat> warpMatrices{warp_matrix_ch1, warp_matrix_ch2};
-
-
-    // valuesFromAffine(warp_matrix_ch1, "CH2 ");
-    // valuesFromAffine(warp_matrix_ch2, "CH3 ");
-
-    // auto warpMatrices = calculateMatrix(channels[0], channels[1], channels[2]);
-    auto warpMatrices = loadMatrix("ch1.config", "ch2.config");
-
-
-    // Config::saveTransfromMatrix(std::get<0>(warpMatrices), "ch1.config");
-    // Config::saveTransfromMatrix(std::get<1>(warpMatrices), "ch2.config");
-
-    valuesFromAffine(std::get<0>(warpMatrices), "CH1 ");
-    // valuesFromAffine(std::get<1>(warpMatrices), "CH2 ");
-
-    // Storage for warped image.
-    cv::UMat ch1Alligned;
-    cv::warpAffine(channels[1], ch1Alligned, std::get<0>(warpMatrices), channels[1].size(), cv::INTER_LINEAR + cv::WARP_INVERSE_MAP);
-
-    cv::UMat ch2Alligned;
-    cv::warpAffine(channels[2], ch2Alligned, std::get<1>(warpMatrices), channels[2].size(), cv::INTER_LINEAR + cv::WARP_INVERSE_MAP);
-
-
-    cv::UMat merged;
-    std::vector<cv::UMat> allignedChannels;
-    allignedChannels.push_back(channels[0]);
-    allignedChannels.push_back(ch1Alligned);
-    allignedChannels.push_back(ch2Alligned);
-    cv::merge(allignedChannels, merged);
-
-    cv::imwrite("./merged4.png", merged);
-
-    const std::string winName = "Aligned Image";
-    cv::namedWindow(winName, cv::WINDOW_NORMAL);
-    cv::imshow(winName, merged);
-    cv::resizeWindow(winName, {1024, 1024});
-    // cv::waitKey();
-
-    // Loop until window closed
-    while (true) {
-      int key = cv::waitKey(30); // 30 ms delay between checks
-      if (cv::getWindowProperty(winName, cv::WND_PROP_VISIBLE) < 1) {
-        break; // window closed by user
-      }
-    }
-
-    cv::destroyAllWindows();
-
-    return 0;
-    */
-}
 
 std::tuple<cv::Mat, cv::Mat> calculateMatrix(cv::Mat reference, cv::Mat ch1, cv::Mat ch2) {
   cv::Mat warpCh1;
@@ -271,4 +123,300 @@ void oldStuff() {
   // cv::imshow("Aligned Image", alignedCh3);
   // cv::waitKey(0);
   /// Old stuff end
+}
+
+/**
+ * @brief Writes out an NC from a vector of RGB channels
+ *
+ * @param channels R, G, B channels for the NC
+ * @param outputPath File to write the NC to
+ */
+void writeNaturalColor(std::vector<cv::UMat> channels, std::filesystem::path outputPath) {
+  cv::UMat RGB321Image;
+  cv::merge(channels, RGB321Image);
+
+  // TODOREWORK: Hue shift red +60°, yellow -702°, overlap 40% - this is the NC
+
+  // For now just write out the raw 321
+  cv::imwrite(outputPath, RGB321Image);
+}
+
+/**
+ * @brief Aligns the input array of channels, resulting in three uniform VIS channels
+ *
+ * @param config Affines for channels
+ * @param satellite Which satellite to get the affines from
+ * @param side Which side is currently being processed (VIS1 or VIS2)
+ * @param input
+ * @param output
+ */
+void alignChannels(Config config, std::string satellite, MSUGS_SIDES side, std::vector<cv::Mat> input, std::vector<cv::UMat>& output) {
+
+  cv::Mat warpCh2;
+  cv::Mat warpCh3;
+
+
+  if (side == VIS1) {
+    warpCh2 = config.getTransformMatrix(satellite + "VIS1", "CH2");
+    warpCh3 = config.getTransformMatrix(satellite + "VIS1", "CH3");
+  } else {
+    warpCh2 = config.getTransformMatrix(satellite + "VIS2", "CH2");
+    warpCh3 = config.getTransformMatrix(satellite + "VIS2", "CH3");
+  }
+
+
+  valuesFromAffine(warpCh2, "CH2 ");
+  valuesFromAffine(warpCh3, "CH3 ");
+
+  cv::UMat ch2Aligned;
+  cv::UMat ch3Aligned;
+  cv::warpAffine(input[1], ch2Aligned, warpCh2, input[1].size(), cv::INTER_LINEAR + cv::WARP_INVERSE_MAP);
+  cv::warpAffine(input[2], ch3Aligned, warpCh3, input[2].size(), cv::INTER_LINEAR + cv::WARP_INVERSE_MAP);
+
+  // Channel 1 is left unchanged, calibration ramp will stay on it
+  output.push_back(input[0].getUMat(cv::ACCESS_READ));
+  output.push_back(ch2Aligned);
+  output.push_back(ch3Aligned);
+
+  // Crops away useless empty bottom, this is present because of the shifted channels
+  cv::Rect cropSize(0, 0, output[0].cols, output[0].rows - 3606);
+  output[0] = output[0](cropSize);
+  output[1] = output[1](cropSize);
+  output[2] = output[2](cropSize);
+}
+
+
+int main(int argc, char** argv) {
+  cv::ocl::setUseOpenCL(true);
+  if (cv::ocl::useOpenCL()) {
+    std::cout << "OpenCL is enabled!" << std::endl;
+  } else {
+    std::cout << "OpenCL is disabled or not supported." << std::endl;
+  }
+
+  ParameterParser parameters;
+  parameters.parseArgs(argc, argv);
+
+  Config config("./config.json");
+
+  // Vertical offsets between channels on MSU-GS, consistent between all satellites
+  auto ch2Shift = ImageProc::shiftImageMatrix(0, CH2_OFFSET);
+  auto ch3Shift = ImageProc::shiftImageMatrix(0, CH3_OFFSET);
+
+  // - Calibration mode -
+  // Gets the affines for both channels (2 & 3) to overlay them over ch1 with the best overlap
+
+  if (parameters.getMode() == ParameterParser::Mode::cCalibrate) {
+    auto RDASDirectory = parameters.getRDASDirectory();
+
+    if (!std::filesystem::exists("./MSUGS_VIS1") || !std::filesystem::exists("./MSUGS_VIS2")) {
+      throw std::runtime_error("You didn't point to a live-decoded RDAS directory! No MSUGS-VIS1 and/or MSUGS-VIS2 folders were found");
+    }
+
+    cv::Mat rgb = cv::imread(RDASDirectory);
+    std::vector<cv::Mat> channels;
+    cv::Mat ch1 = cv::imread(RDASDirectory.append("/MSUGS_VIS1/MSUGS-VIS-1.png"), cv::IMREAD_GRAYSCALE); // R
+    cv::Mat ch2 = cv::imread(RDASDirectory.append("/MSUGS_VIS1/MSUGS-VIS-2.png"), cv::IMREAD_GRAYSCALE); // G
+    cv::Mat ch3 = cv::imread(RDASDirectory.append("/MSUGS_VIS1/MSUGS-VIS-3.png"), cv::IMREAD_GRAYSCALE); // B
+
+    channels.push_back(ch1);
+    channels.push_back(ch2);
+    channels.push_back(ch3);
+
+    std::cout << "Calibration begin" << std::endl;
+
+    // - Alignment and affine parameter finding for channel 2
+    cv::Mat ch2WarpMatrix = (cv::Mat_<float>(2, 3) << 1, 0, 0, 0, 1, 0);
+    auto ch2thread = std::thread([&]() {
+      cv::Mat ch2Alligned;
+      cv::warpAffine(channels[1], ch2Alligned, ch2Shift, channels[1].size(), cv::INTER_LINEAR + cv::WARP_INVERSE_MAP);
+      ch2WarpMatrix = ImageProc::findMatrix(channels[0], ch2Alligned);
+    });
+
+    // - Alignment and affine parameter finding for channel 2
+    cv::Mat ch3WarpMatrix = (cv::Mat_<float>(2, 3) << 1, 0, 0, 0, 1, 0);
+    auto ch3thread = std::thread([&]() {
+      cv::Mat ch3Alligned;
+      cv::warpAffine(channels[2], ch3Alligned, ch3Shift, channels[2].size(), cv::INTER_LINEAR + cv::WARP_INVERSE_MAP);
+      ch3WarpMatrix = ImageProc::findMatrix(channels[0], ch3Alligned);
+    });
+
+    ch2thread.join();
+    ch3thread.join();
+
+    ch2WarpMatrix.at<float>(0, 2) += ch2Shift.at<float>(0, 2); // Horizontal
+    ch2WarpMatrix.at<float>(1, 2) += ch2Shift.at<float>(1, 2); // Vertical
+
+    ch3WarpMatrix.at<float>(0, 2) += ch3Shift.at<float>(0, 2); // Horizontal
+    ch3WarpMatrix.at<float>(1, 2) += ch3Shift.at<float>(1, 2); // Vertical
+
+    std::cout << "Calibration done" << std::endl;
+
+    valuesFromAffine(ch2WarpMatrix, "CH2 ");
+    valuesFromAffine(ch3WarpMatrix, "CH3 ");
+
+    config.setTransfromMatrix(ch2WarpMatrix, parameters.getSatellite(), "CH2");
+    config.setTransfromMatrix(ch3WarpMatrix, parameters.getSatellite(), "CH3");
+
+
+    return 0;
+  }
+
+  // - Generation mode -
+  // Aligns both VIS channels, outputs products to dir
+
+  auto RDASDirectory = parameters.getRDASDirectory();
+  auto NCPath = parameters.outputPath();
+  auto VIS1_directory = RDASDirectory / "MSUGS_VIS1";
+  auto VIS2_directory = RDASDirectory / "MSUGS_VIS2";
+
+  if (!std::filesystem::exists(VIS1_directory) || !std::filesystem::exists(VIS2_directory)) {
+    throw std::runtime_error("You didn't point to a live-decoded RDAS directory! No MSUGS-VIS1 and/or MSUGS-VIS2 folders were found");
+  }
+
+  {
+    // Load VIS1 channels in
+    std::vector<cv::Mat> VIS1_channels;
+    cv::Mat ch1 = cv::imread(VIS1_directory / "MSUGS-VIS-1.png", cv::IMREAD_GRAYSCALE); // R
+    cv::Mat ch2 = cv::imread(VIS1_directory / "MSUGS-VIS-2.png", cv::IMREAD_GRAYSCALE); // G
+    cv::Mat ch3 = cv::imread(VIS1_directory / "MSUGS-VIS-3.png", cv::IMREAD_GRAYSCALE); // B
+
+    VIS1_channels.push_back(ch1);
+    VIS1_channels.push_back(ch2);
+    VIS1_channels.push_back(ch3);
+
+
+    std::vector<cv::UMat> VIS1_allignedChannels;
+
+    alignChannels(config, parameters.getSatellite(), VIS1, VIS1_channels, VIS1_allignedChannels);
+
+    // Save the VIS1 image results
+    // TODOREWORK: Only do this with the merged product in the end!
+
+    std::filesystem::path output_directory = RDASDirectory / "MSUGS_VIS-1_Aligned";
+
+    if (!std::filesystem::exists(output_directory))
+      std::filesystem::create_directory(output_directory);
+
+    cv::imwrite(output_directory / "MSUGS-VIS-1.png", VIS1_allignedChannels[0]);
+    cv::imwrite(output_directory / "MSUGS-VIS-2.png", VIS1_allignedChannels[1]);
+    cv::imwrite(output_directory / "MSUGS-VIS-3.png", VIS1_allignedChannels[2]);
+
+    // Product.cbor is identical
+    std::filesystem::path cborTarget = output_directory / "product.cbor";
+    if (std::filesystem::exists(cborTarget))
+      std::filesystem::remove(cborTarget);
+
+    std::filesystem::copy(VIS1_directory / "product.cbor", cborTarget);
+
+    // Writes an NC if path was supplied
+    // TODOREWORK: Write out the NC from merged channels and not just one
+    if (NCPath != "") {
+      writeNaturalColor(VIS1_allignedChannels, NCPath);
+    }
+  }
+
+
+  // Same logic for VIS2...
+  {
+    // Load VIS2 channels in
+    std::vector<cv::Mat> VIS2_channels;
+    cv::Mat VIS2_ch1 = cv::imread(VIS2_directory / "MSUGS-VIS-1.png", cv::IMREAD_GRAYSCALE); // R
+    cv::Mat VIS2_ch2 = cv::imread(VIS2_directory / "MSUGS-VIS-2.png", cv::IMREAD_GRAYSCALE); // G
+    cv::Mat VIS2_ch3 = cv::imread(VIS2_directory / "MSUGS-VIS-3.png", cv::IMREAD_GRAYSCALE); // B
+
+    VIS2_channels.push_back(VIS2_ch1);
+    VIS2_channels.push_back(VIS2_ch2);
+    VIS2_channels.push_back(VIS2_ch3);
+
+
+    std::vector<cv::UMat> VIS2_alignedChannels;
+
+    alignChannels(config, parameters.getSatellite(), VIS2, VIS2_channels, VIS2_alignedChannels);
+
+    // Save the VIS2 image results
+    // TODOREWORK: Only do this with the merged product in the end!
+    {
+      auto output_directory = RDASDirectory / "MSUGS_VIS-2_Aligned";
+
+      if (!std::filesystem::exists(output_directory))
+        std::filesystem::create_directory(output_directory);
+
+      cv::imwrite(output_directory / "MSUGS-VIS-1.png", VIS2_alignedChannels[0]);
+      cv::imwrite(output_directory / "MSUGS-VIS-2.png", VIS2_alignedChannels[1]);
+      cv::imwrite(output_directory / "MSUGS-VIS-3.png", VIS2_alignedChannels[2]);
+
+      // Product.cbor is identical
+      std::filesystem::path cborTarget = output_directory / "product.cbor";
+      if (std::filesystem::exists(cborTarget))
+        std::filesystem::remove(cborTarget);
+
+      std::filesystem::copy(VIS1_directory / "product.cbor", cborTarget);
+    }
+  }
+
+  // TODOREWORK: Logic to merge MSUGS VIS2 can be added here
+  // When done, remove save handling for the individual sides and just copy it once for the merged images
+
+
+  /*
+    cv::UMat rgb;
+    cv::imread("merged2.png").copyTo(rgb);
+    std::vector<cv::UMat> channels;
+    cv::split(rgb, channels);
+
+
+    cv::Mat warp_matrix_ch1 = ImageProc::shiftImageMatrix(0, -1760);
+    cv::Mat warp_matrix_ch2 = ImageProc::shiftImageMatrix(0, -3565);
+    // std::tuple<cv::Mat, cv::Mat> warpMatrices{warp_matrix_ch1, warp_matrix_ch2};
+
+
+    // valuesFromAffine(warp_matrix_ch1, "CH2 ");
+    // valuesFromAffine(warp_matrix_ch2, "CH3 ");
+
+    // auto warpMatrices = calculateMatrix(channels[0], channels[1], channels[2]);
+    auto warpMatrices = loadMatrix("ch1.config", "ch2.config");
+
+
+    // Config::saveTransfromMatrix(std::get<0>(warpMatrices), "ch1.config");
+    // Config::saveTransfromMatrix(std::get<1>(warpMatrices), "ch2.config");
+
+    valuesFromAffine(std::get<0>(warpMatrices), "CH1 ");
+    // valuesFromAffine(std::get<1>(warpMatrices), "CH2 ");
+
+    // Storage for warped image.
+    cv::UMat ch1Alligned;
+    cv::warpAffine(channels[1], ch1Alligned, std::get<0>(warpMatrices), channels[1].size(), cv::INTER_LINEAR + cv::WARP_INVERSE_MAP);
+
+    cv::UMat ch2Alligned;
+    cv::warpAffine(channels[2], ch2Alligned, std::get<1>(warpMatrices), channels[2].size(), cv::INTER_LINEAR + cv::WARP_INVERSE_MAP);
+
+
+    cv::UMat merged;
+    std::vector<cv::UMat> allignedChannels;
+    allignedChannels.push_back(channels[0]);
+    allignedChannels.push_back(ch1Alligned);
+    allignedChannels.push_back(ch2Alligned);
+    cv::merge(allignedChannels, merged);
+
+    cv::imwrite("./merged4.png", merged);
+
+    const std::string winName = "Aligned Image";
+    cv::namedWindow(winName, cv::WINDOW_NORMAL);
+    cv::imshow(winName, merged);
+    cv::resizeWindow(winName, {1024, 1024});
+    // cv::waitKey();
+
+    // Loop until window closed
+    while (true) {
+      int key = cv::waitKey(30); // 30 ms delay between checks
+      if (cv::getWindowProperty(winName, cv::WND_PROP_VISIBLE) < 1) {
+        break; // window closed by user
+      }
+    }
+
+    cv::destroyAllWindows();
+
+    return 0;
+    */
 }
