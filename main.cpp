@@ -13,10 +13,9 @@
 #include "parameterparser.h"
 // #include "tps.h"
 
-#define CH2_OFFSET 3606
-#define CH3_OFFSET 1804
+static constexpr int CH2_OFFSET = 3606;
+static constexpr int CH3_OFFSET = 1804;
 
-enum MSUGS_SIDES { VIS1, VIS2 };
 
 void valuesFromEuclidean(const cv::Mat& warp);
 std::tuple<cv::Mat, cv::Mat> calculateMatrix(cv::Mat reference, cv::Mat ch1, cv::Mat ch2);
@@ -126,6 +125,55 @@ void oldStuff() {
 }
 
 /**
+ * @brief Finds affines between ch1 and ch2/3, saves them as affineIndex
+ *
+ * @param config Affine value config file
+ * @param affineIndex Index to save affine values as
+ * @param input 3 input channels to find the affines for
+ */
+void findAffines(Config config, std::string affineIndex, std::vector<cv::Mat> input) {
+
+  // Vertical offsets between channels on MSU-GS, consistent between all satellites
+  auto ch2Shift = ImageProc::shiftImageMatrix(0, CH2_OFFSET);
+  auto ch3Shift = ImageProc::shiftImageMatrix(0, CH3_OFFSET);
+
+  std::cout << "Calibration started for " << affineIndex << std::endl;
+
+  // - Alignment and affine parameter finding for channel 2
+  cv::Mat ch2WarpMatrix = (cv::Mat_<float>(2, 3) << 1, 0, 0, 0, 1, 0);
+  auto ch2thread = std::thread([&]() {
+    cv::Mat ch2Aligned;
+    cv::warpAffine(input[1], ch2Aligned, ch2Shift, input[1].size(), cv::INTER_LINEAR + cv::WARP_INVERSE_MAP);
+    ch2WarpMatrix = ImageProc::findMatrix(input[0], ch2Aligned);
+  });
+
+  // - Alignment and affine parameter finding for channel 3
+  cv::Mat ch3WarpMatrix = (cv::Mat_<float>(2, 3) << 1, 0, 0, 0, 1, 0);
+  auto ch3thread = std::thread([&]() {
+    cv::Mat ch3Aligned;
+    cv::warpAffine(input[2], ch3Aligned, ch3Shift, input[2].size(), cv::INTER_LINEAR + cv::WARP_INVERSE_MAP);
+    ch3WarpMatrix = ImageProc::findMatrix(input[0], ch3Aligned);
+  });
+
+  ch2thread.join();
+  ch3thread.join();
+
+  ch2WarpMatrix.at<float>(0, 2) += ch2Shift.at<float>(0, 2); // Horizontal
+  ch2WarpMatrix.at<float>(1, 2) += ch2Shift.at<float>(1, 2); // Vertical
+
+  ch3WarpMatrix.at<float>(0, 2) += ch3Shift.at<float>(0, 2); // Horizontal
+  ch3WarpMatrix.at<float>(1, 2) += ch3Shift.at<float>(1, 2); // Vertical
+
+  std::cout << "Calibration done for " << affineIndex << std::endl;
+
+  valuesFromAffine(ch2WarpMatrix, "CH2 ");
+  valuesFromAffine(ch3WarpMatrix, "CH3 ");
+
+  config.setTransfromMatrix(ch2WarpMatrix, affineIndex, "CH2");
+  config.setTransfromMatrix(ch3WarpMatrix, affineIndex, "CH3");
+}
+
+/**
  * @brief Writes out an NC from a vector of RGB channels
  *
  * @param channels R, G, B channels for the NC
@@ -144,26 +192,15 @@ void writeNaturalColor(std::vector<cv::UMat> channels, std::filesystem::path out
 /**
  * @brief Aligns the input array of channels, resulting in three uniform VIS channels
  *
- * @param config Affines for channels
- * @param satellite Which satellite to get the affines from
- * @param side Which side is currently being processed (VIS1 or VIS2)
- * @param input
- * @param output
+ * @param config Affine value config file
+ * @param affineIndex Index of the affine values
+ * @param input Vector of 3 raw input channels
+ * @param output Vector of 3 aligned output channels
  */
-void alignChannels(Config config, std::string satellite, MSUGS_SIDES side, std::vector<cv::Mat> input, std::vector<cv::UMat>& output) {
+void alignChannels(Config config, std::string affineIndex, std::vector<cv::Mat> input, std::vector<cv::UMat>& output) {
 
-  cv::Mat warpCh2;
-  cv::Mat warpCh3;
-
-
-  if (side == VIS1) {
-    warpCh2 = config.getTransformMatrix(satellite + "VIS1", "CH2");
-    warpCh3 = config.getTransformMatrix(satellite + "VIS1", "CH3");
-  } else {
-    warpCh2 = config.getTransformMatrix(satellite + "VIS2", "CH2");
-    warpCh3 = config.getTransformMatrix(satellite + "VIS2", "CH3");
-  }
-
+  cv::Mat warpCh2 = config.getTransformMatrix(affineIndex, "CH2");
+  cv::Mat warpCh3 = config.getTransformMatrix(affineIndex, "CH3");
 
   valuesFromAffine(warpCh2, "CH2 ");
   valuesFromAffine(warpCh3, "CH3 ");
@@ -199,65 +236,43 @@ int main(int argc, char** argv) {
 
   Config config("./config.json");
 
-  // Vertical offsets between channels on MSU-GS, consistent between all satellites
-  auto ch2Shift = ImageProc::shiftImageMatrix(0, CH2_OFFSET);
-  auto ch3Shift = ImageProc::shiftImageMatrix(0, CH3_OFFSET);
-
   // - Calibration mode -
   // Gets the affines for both channels (2 & 3) to overlay them over ch1 with the best overlap
 
   if (parameters.getMode() == ParameterParser::Mode::cCalibrate) {
     auto RDASDirectory = parameters.getRDASDirectory();
 
-    if (!std::filesystem::exists("./MSUGS_VIS1") || !std::filesystem::exists("./MSUGS_VIS2")) {
+    if (!std::filesystem::exists(RDASDirectory / "MSUGS_VIS1") || !std::filesystem::exists(RDASDirectory / "MSUGS_VIS2")) {
       throw std::runtime_error("You didn't point to a live-decoded RDAS directory! No MSUGS-VIS1 and/or MSUGS-VIS2 folders were found");
     }
 
-    cv::Mat rgb = cv::imread(RDASDirectory);
-    std::vector<cv::Mat> channels;
-    cv::Mat ch1 = cv::imread(RDASDirectory.append("/MSUGS_VIS1/MSUGS-VIS-1.png"), cv::IMREAD_GRAYSCALE); // R
-    cv::Mat ch2 = cv::imread(RDASDirectory.append("/MSUGS_VIS1/MSUGS-VIS-2.png"), cv::IMREAD_GRAYSCALE); // G
-    cv::Mat ch3 = cv::imread(RDASDirectory.append("/MSUGS_VIS1/MSUGS-VIS-3.png"), cv::IMREAD_GRAYSCALE); // B
+    // VIS1
+    std::vector<cv::Mat> VIS1_channels;
 
-    channels.push_back(ch1);
-    channels.push_back(ch2);
-    channels.push_back(ch3);
+    cv::Mat VIS1_ch1 = cv::imread(RDASDirectory / "MSUGS_VIS1" / "MSUGS-VIS-1.png", cv::IMREAD_GRAYSCALE); // R
+    cv::Mat VIS1_ch2 = cv::imread(RDASDirectory / "MSUGS_VIS1" / "MSUGS-VIS-2.png", cv::IMREAD_GRAYSCALE); // G
+    cv::Mat VIS1_ch3 = cv::imread(RDASDirectory / "MSUGS_VIS1" / "MSUGS-VIS-3.png", cv::IMREAD_GRAYSCALE); // B
 
-    std::cout << "Calibration begin" << std::endl;
+    VIS1_channels.push_back(VIS1_ch1);
+    VIS1_channels.push_back(VIS1_ch2);
+    VIS1_channels.push_back(VIS1_ch3);
 
-    // - Alignment and affine parameter finding for channel 2
-    cv::Mat ch2WarpMatrix = (cv::Mat_<float>(2, 3) << 1, 0, 0, 0, 1, 0);
-    auto ch2thread = std::thread([&]() {
-      cv::Mat ch2Alligned;
-      cv::warpAffine(channels[1], ch2Alligned, ch2Shift, channels[1].size(), cv::INTER_LINEAR + cv::WARP_INVERSE_MAP);
-      ch2WarpMatrix = ImageProc::findMatrix(channels[0], ch2Alligned);
-    });
+    findAffines(config, parameters.getSatellite() + "VIS1", VIS1_channels);
 
-    // - Alignment and affine parameter finding for channel 2
-    cv::Mat ch3WarpMatrix = (cv::Mat_<float>(2, 3) << 1, 0, 0, 0, 1, 0);
-    auto ch3thread = std::thread([&]() {
-      cv::Mat ch3Alligned;
-      cv::warpAffine(channels[2], ch3Alligned, ch3Shift, channels[2].size(), cv::INTER_LINEAR + cv::WARP_INVERSE_MAP);
-      ch3WarpMatrix = ImageProc::findMatrix(channels[0], ch3Alligned);
-    });
+    // VIS2
+    std::vector<cv::Mat> VIS2_channels;
 
-    ch2thread.join();
-    ch3thread.join();
+    cv::Mat VIS2_ch1 = cv::imread(RDASDirectory / "MSUGS_VIS2" / "MSUGS-VIS-1.png", cv::IMREAD_GRAYSCALE); // R
+    cv::Mat VIS2_ch2 = cv::imread(RDASDirectory / "MSUGS_VIS2" / "MSUGS-VIS-2.png", cv::IMREAD_GRAYSCALE); // G
+    cv::Mat VIS2_ch3 = cv::imread(RDASDirectory / "MSUGS_VIS2" / "MSUGS-VIS-3.png", cv::IMREAD_GRAYSCALE); // B
 
-    ch2WarpMatrix.at<float>(0, 2) += ch2Shift.at<float>(0, 2); // Horizontal
-    ch2WarpMatrix.at<float>(1, 2) += ch2Shift.at<float>(1, 2); // Vertical
+    VIS2_channels.push_back(VIS2_ch1);
+    VIS2_channels.push_back(VIS2_ch2);
+    VIS2_channels.push_back(VIS2_ch3);
 
-    ch3WarpMatrix.at<float>(0, 2) += ch3Shift.at<float>(0, 2); // Horizontal
-    ch3WarpMatrix.at<float>(1, 2) += ch3Shift.at<float>(1, 2); // Vertical
+    findAffines(config, parameters.getSatellite() + "VIS2", VIS2_channels);
 
-    std::cout << "Calibration done" << std::endl;
-
-    valuesFromAffine(ch2WarpMatrix, "CH2 ");
-    valuesFromAffine(ch3WarpMatrix, "CH3 ");
-
-    config.setTransfromMatrix(ch2WarpMatrix, parameters.getSatellite(), "CH2");
-    config.setTransfromMatrix(ch3WarpMatrix, parameters.getSatellite(), "CH3");
-
+    std::cout << "Affine values for both channels have been saved!" << std::endl;
 
     return 0;
   }
@@ -286,9 +301,9 @@ int main(int argc, char** argv) {
     VIS1_channels.push_back(ch3);
 
 
-    std::vector<cv::UMat> VIS1_allignedChannels;
+    std::vector<cv::UMat> VIS1_alignedChannels;
 
-    alignChannels(config, parameters.getSatellite(), VIS1, VIS1_channels, VIS1_allignedChannels);
+    alignChannels(config, parameters.getSatellite() + "VIS1", VIS1_channels, VIS1_alignedChannels);
 
     // Save the VIS1 image results
     // TODOREWORK: Only do this with the merged product in the end!
@@ -298,9 +313,9 @@ int main(int argc, char** argv) {
     if (!std::filesystem::exists(output_directory))
       std::filesystem::create_directory(output_directory);
 
-    cv::imwrite(output_directory / "MSUGS-VIS-1.png", VIS1_allignedChannels[0]);
-    cv::imwrite(output_directory / "MSUGS-VIS-2.png", VIS1_allignedChannels[1]);
-    cv::imwrite(output_directory / "MSUGS-VIS-3.png", VIS1_allignedChannels[2]);
+    cv::imwrite(output_directory / "MSUGS-VIS-1.png", VIS1_alignedChannels[0]);
+    cv::imwrite(output_directory / "MSUGS-VIS-2.png", VIS1_alignedChannels[1]);
+    cv::imwrite(output_directory / "MSUGS-VIS-3.png", VIS1_alignedChannels[2]);
 
     // Product.cbor is identical
     std::filesystem::path cborTarget = output_directory / "product.cbor";
@@ -312,7 +327,7 @@ int main(int argc, char** argv) {
     // Writes an NC if path was supplied
     // TODOREWORK: Write out the NC from merged channels and not just one
     if (NCPath != "") {
-      writeNaturalColor(VIS1_allignedChannels, NCPath);
+      writeNaturalColor(VIS1_alignedChannels, NCPath);
     }
   }
 
@@ -332,7 +347,7 @@ int main(int argc, char** argv) {
 
     std::vector<cv::UMat> VIS2_alignedChannels;
 
-    alignChannels(config, parameters.getSatellite(), VIS2, VIS2_channels, VIS2_alignedChannels);
+    alignChannels(config, parameters.getSatellite() + "VIS2", VIS2_channels, VIS2_alignedChannels);
 
     // Save the VIS2 image results
     // TODOREWORK: Only do this with the merged product in the end!

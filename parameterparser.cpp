@@ -3,7 +3,7 @@
 
 ParameterParser::ParameterParser() {
   mSettingsList.push_back(ParameterData("--help", "-h", "Print help")); // TODOREWORK: this is not iplemented
-  mSettingsList.push_back(ParameterData("--sat", "-s", "Satellite name"));
+  mSettingsList.push_back(ParameterData("--sat", "-s", "Satellite name (L2|L3|L4|M1|M2)"));
   mSettingsList.push_back(ParameterData("--mode", "-m", "calibrate|generate (default:generate)"));
   mSettingsList.push_back(ParameterData("--directory", "-d", "Live input directory"));
   mSettingsList.push_back(ParameterData("--nc", "-n", "Output NC image (optional)"));
