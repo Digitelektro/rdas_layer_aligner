@@ -1,0 +1,25 @@
+Aligns RDAS channels in order to be processable using SatDump to make proper composites without the 3D blur effect
+
+To use:
+```sh
+git clone https://github.com/Digitelektro/rdas_layer_aligner/
+cd rdas_layer_aligner
+
+mkdir build && cd build
+cmake ..
+make -j`nproc`
+
+# Symlink config to use precalculated calibration:
+ln -s ../config.json config.json
+
+# To get your own calibration coefficients:
+./rdas_layer_aligner -s <sat: L2|L3|L4|M1|M2> -d <live-output-directory> -m calibrate
+# e.g. ./rdas_layer_aligner -s L2 -d 2025-01-02_12-34_elektro-rdas -m calibrate
+
+# To use to align:
+./rdas_layer_aligner -s <sat: L2|L3|L4|M1|M2> -d <live-output-directory> -m generate
+# e.g. ./rdas_layer_aligner -s L2 -d 2025-01-02_12-34_elektro-rdas -m generate
+
+# Optionally you can use this to output an NC as well by adding the -n switch with the name of the NC image. That spits out an RGB321.
+
+```
