@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.10)
 
 project(rdas_aligner LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
@@ -13,7 +13,7 @@ message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 find_package(OpenCV)
 find_package(OpenCL)
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(JSONCPP jsoncpp)
+find_package(jsoncpp CONFIG REQUIRED)
 
 add_executable(rdas_aligner
     main.cpp
@@ -30,7 +30,7 @@ include_directories(
 
 target_link_libraries(rdas_aligner
     ${OpenCV_LIBS}
-    ${JSONCPP_LIBRARIES}
+    jsoncpp_lib  
 )
 
 if(OpenCL_FOUND)
