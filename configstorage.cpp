@@ -56,5 +56,6 @@ void Config::save() {
     ofstream << jsonString;
     ofstream.close();
   } else {
+    std::cout << "Failed to save config" << std::endl;
   }
 }

@@ -131,7 +131,7 @@ void oldStuff() {
  * @param affineIndex Index to save affine values as
  * @param input 3 input channels to find the affines for
  */
-void findAffines(Config config, std::string affineIndex, std::vector<cv::Mat> input) {
+void findAffines(Config& config, std::string affineIndex, std::vector<cv::Mat> input) {
 
   // Vertical offsets between channels on MSU-GS, consistent between all satellites
   auto ch2Shift = ImageProc::shiftImageMatrix(0, CH2_OFFSET);
