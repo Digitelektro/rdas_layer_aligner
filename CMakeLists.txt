@@ -20,6 +20,7 @@ add_executable(rdas_aligner
     parameterparser.cpp
     tps.cpp
     configstorage.cpp
+    imageproc.cpp
     opencl.cpp
 )
 

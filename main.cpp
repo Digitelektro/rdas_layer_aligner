@@ -183,10 +183,17 @@ void writeNaturalColor(std::vector<cv::UMat> channels, std::filesystem::path out
   cv::UMat RGB321Image;
   cv::merge(channels, RGB321Image);
 
-  // TODOREWORK: Hue shift red +60°, yellow -702°, overlap 40% - this is the NC
+  // Hue shift red +60°, yellow -70°, overlap 40% - this is the NC
+  std::vector<ImageProc::HueShiftRule> rules = {
+    // RED
+    //{175, 5, 30},
+    // YELLOW
+    {20, 45, -35},
+  };
+  auto hueCorrectedImg = ImageProc::hue(RGB321Image, rules, 40.0);
 
   // For now just write out the raw 321
-  cv::imwrite(outputPath, RGB321Image);
+  cv::imwrite(outputPath, hueCorrectedImg);
 }
 
 /**

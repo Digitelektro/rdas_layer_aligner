@@ -4,6 +4,13 @@
 #include <opencv2/opencv.hpp>
 
 class ImageProc {
+public:
+  struct HueShiftRule {
+    int hMin;  // inclusive, 0–179
+    int hMax;  // inclusive, 0–179
+    int shift; // signed shift, wrap at 0–179
+  };
+
 private:
   // Specify the number of iterations.
   static constexpr int cNumOfIterations = 500;
@@ -34,4 +41,11 @@ public:
     // Create 2x3 affine transform matrix for translation
     return (cv::Mat_<float>(2, 3) << 1, 0, x, 0, 1, y);
   }
+
+  /// @brief Apply hue. OpenCV uses 0–179° (not 0–360°)
+  /// @param image
+  /// @param rules
+  /// @param blend
+  /// @return
+  static cv::UMat hue(cv::UMat image, const std::vector<HueShiftRule>& rules, float blend);
 };
