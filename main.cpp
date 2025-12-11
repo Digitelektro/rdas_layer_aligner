@@ -162,7 +162,7 @@ void writeNaturalColor(const std::vector<cv::UMat>& channels, const std::filesys
     // YELLOW
     {20, 50, -3},
   };
-  auto hueCorrectedImg = ImageProc::hue(RGB321Image, rules, 100.0);
+  auto hueCorrectedImg = ImageProc::hue(RGB321Image, rules, 40.0);
 
   // For now just write out the raw 321
   cv::imwrite(outputPath, hueCorrectedImg);
@@ -284,86 +284,66 @@ int main(int argc, char** argv) {
     throw std::runtime_error("You didn't point to a live-decoded RDAS directory! No MSUGS-VIS1 and/or MSUGS-VIS2 folders were found");
   }
 
-  {
-    // Load VIS1 channels in
-    std::vector<cv::Mat> VIS1_channels;
-    cv::Mat ch1 = cv::imread(VIS1_directory / "MSUGS-VIS-1.png", cv::IMREAD_GRAYSCALE); // R
-    cv::Mat ch2 = cv::imread(VIS1_directory / "MSUGS-VIS-2.png", cv::IMREAD_GRAYSCALE); // G
-    cv::Mat ch3 = cv::imread(VIS1_directory / "MSUGS-VIS-3.png", cv::IMREAD_GRAYSCALE); // B
 
-    VIS1_channels.push_back(ch1);
-    VIS1_channels.push_back(ch2);
-    VIS1_channels.push_back(ch3);
+  std::vector<cv::Mat> VIS1_channels;
+  std::vector<cv::UMat> VIS1_alignedChannels;
 
+  cv::Mat ch1 = cv::imread(VIS1_directory / "MSUGS-VIS-1.png", cv::IMREAD_GRAYSCALE); // R
+  cv::Mat ch2 = cv::imread(VIS1_directory / "MSUGS-VIS-2.png", cv::IMREAD_GRAYSCALE); // G
+  cv::Mat ch3 = cv::imread(VIS1_directory / "MSUGS-VIS-3.png", cv::IMREAD_GRAYSCALE); // B
 
-    std::vector<cv::UMat> VIS1_alignedChannels;
+  VIS1_channels.push_back(ch1);
+  VIS1_channels.push_back(ch2);
+  VIS1_channels.push_back(ch3);
 
-    alignChannels(config, parameters.getSatellite() + "VIS1", VIS1_channels, VIS1_alignedChannels);
-
-    // Save the VIS1 image results
-    // TODOREWORK: Only do this with the merged product in the end!
-
-    std::filesystem::path output_directory = RDASDirectory / "MSUGS_VIS-1_Aligned";
-
-    if (!std::filesystem::exists(output_directory))
-      std::filesystem::create_directory(output_directory);
-
-    cv::imwrite(output_directory / "MSUGS-VIS-1.png", VIS1_alignedChannels[0]);
-    cv::imwrite(output_directory / "MSUGS-VIS-2.png", VIS1_alignedChannels[1]);
-    cv::imwrite(output_directory / "MSUGS-VIS-3.png", VIS1_alignedChannels[2]);
-
-    // Product.cbor is identical
-    std::filesystem::path cborTarget = output_directory / "product.cbor";
-    if (std::filesystem::exists(cborTarget)) {
-      std::filesystem::remove(cborTarget);
-    }
-
-    std::filesystem::copy(VIS1_directory / "product.cbor", cborTarget);
-
-    // Same logic for VIS2...
-    // Load VIS2 channels in
-    std::vector<cv::Mat> VIS2_channels;
-    cv::Mat VIS2_ch1 = cv::imread(VIS2_directory / "MSUGS-VIS-1.png", cv::IMREAD_GRAYSCALE); // R
-    cv::Mat VIS2_ch2 = cv::imread(VIS2_directory / "MSUGS-VIS-2.png", cv::IMREAD_GRAYSCALE); // G
-    cv::Mat VIS2_ch3 = cv::imread(VIS2_directory / "MSUGS-VIS-3.png", cv::IMREAD_GRAYSCALE); // B
-
-    VIS2_channels.push_back(VIS2_ch1);
-    VIS2_channels.push_back(VIS2_ch2);
-    VIS2_channels.push_back(VIS2_ch3);
+  alignChannels(config, parameters.getSatellite() + "VIS1", VIS1_channels, VIS1_alignedChannels);
 
 
-    std::vector<cv::UMat> VIS2_alignedChannels;
+  // Same logic for VIS2...
+  // Load VIS2 channels in
+  std::vector<cv::Mat> VIS2_channels;
+  std::vector<cv::UMat> VIS2_alignedChannels;
 
-    alignChannels(config, parameters.getSatellite() + "VIS2", VIS2_channels, VIS2_alignedChannels);
+  cv::Mat VIS2_ch1 = cv::imread(VIS2_directory / "MSUGS-VIS-1.png", cv::IMREAD_GRAYSCALE); // R
+  cv::Mat VIS2_ch2 = cv::imread(VIS2_directory / "MSUGS-VIS-2.png", cv::IMREAD_GRAYSCALE); // G
+  cv::Mat VIS2_ch3 = cv::imread(VIS2_directory / "MSUGS-VIS-3.png", cv::IMREAD_GRAYSCALE); // B
 
-    // Save the VIS2 image results
-    // TODOREWORK: Only do this with the merged product in the end!
-    {
-      auto output_directory = RDASDirectory / "MSUGS_VIS-2_Aligned";
+  VIS2_channels.push_back(VIS2_ch1);
+  VIS2_channels.push_back(VIS2_ch2);
+  VIS2_channels.push_back(VIS2_ch3);
 
-      if (!std::filesystem::exists(output_directory))
-        std::filesystem::create_directory(output_directory);
+  alignChannels(config, parameters.getSatellite() + "VIS2", VIS2_channels, VIS2_alignedChannels);
 
-      cv::imwrite(output_directory / "MSUGS-VIS-1.png", VIS2_alignedChannels[0]);
-      cv::imwrite(output_directory / "MSUGS-VIS-2.png", VIS2_alignedChannels[1]);
-      cv::imwrite(output_directory / "MSUGS-VIS-3.png", VIS2_alignedChannels[2]);
 
-      // Product.cbor is identical
-      std::filesystem::path cborTarget = output_directory / "product.cbor";
-      if (std::filesystem::exists(cborTarget))
-        std::filesystem::remove(cborTarget);
+  // Merge channels
+  auto mergedCH1 = mergeLeftRight(config, parameters.getSatellite(), VIS1_alignedChannels[0], VIS2_alignedChannels[0]);
+  auto mergedCH2 = mergeLeftRight(config, parameters.getSatellite(), VIS1_alignedChannels[1], VIS2_alignedChannels[1]);
+  auto mergedCH3 = mergeLeftRight(config, parameters.getSatellite(), VIS1_alignedChannels[2], VIS2_alignedChannels[2]);
 
-      std::filesystem::copy(VIS1_directory / "product.cbor", cborTarget);
-    }
 
-    auto mergedCH1 = mergeLeftRight(config, parameters.getSatellite(), VIS1_alignedChannels[0], VIS2_alignedChannels[0]);
-    auto mergedCH2 = mergeLeftRight(config, parameters.getSatellite(), VIS1_alignedChannels[1], VIS2_alignedChannels[1]);
-    auto mergedCH3 = mergeLeftRight(config, parameters.getSatellite(), VIS1_alignedChannels[2], VIS2_alignedChannels[2]);
+  // Save results
+  std::filesystem::path output_directory = RDASDirectory / "MSUGS_VIS_Aligned";
 
-    // Writes an NC if path was supplied
-    if (NCPath != "") {
-      std::vector<cv::UMat> merged{mergedCH1, mergedCH2, mergedCH3};
-      writeNaturalColor(merged, NCPath);
-    }
+  if (!std::filesystem::exists(output_directory))
+    std::filesystem::create_directory(output_directory);
+
+  cv::imwrite(output_directory / "MSUGS-VIS-1.png", mergedCH1);
+  cv::imwrite(output_directory / "MSUGS-VIS-2.png", mergedCH2);
+  cv::imwrite(output_directory / "MSUGS-VIS-3.png", mergedCH3);
+
+  // Product.cbor is identical from either VIS due to the lack of calibration
+  std::filesystem::path cborTarget = output_directory / "product.cbor";
+
+  // overwrite if it already exists
+  if (std::filesystem::exists(cborTarget)) {
+    std::filesystem::remove(cborTarget);
+  }
+
+  std::filesystem::copy(VIS1_directory / "product.cbor", cborTarget);
+
+  // Writes an NC if a path was supplied
+  if (NCPath != "") {
+    std::vector<cv::UMat> merged{mergedCH1, mergedCH2, mergedCH3};
+    writeNaturalColor(merged, NCPath);
   }
 }
