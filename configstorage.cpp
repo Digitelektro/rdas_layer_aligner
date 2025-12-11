@@ -45,6 +45,22 @@ void Config::setTransfromMatrix(const cv::Mat& matrix, const std::string& satell
   save();
 }
 
+cv::Rect Config::getROI(const std::string& satellite) {
+  auto roi = mJsonConfig[satellite]["ROI"];
+  return cv::Rect{roi["x"].asInt(), roi["y"].asInt(), roi["width"].asInt(), roi["height"].asInt()};
+}
+
+void Config::setROI(const std::string& satellite, const cv::Rect& rect) {
+  Json::Value config(Json::objectValue);
+  config["x"] = rect.x;
+  config["y"] = rect.y;
+  config["width"] = rect.width;
+  config["height"] = rect.height;
+  mJsonConfig[satellite]["ROI"] = config;
+
+  save();
+}
+
 void Config::save() {
   int rc = 0;
   Json::StreamWriterBuilder jsonStreamWriter;

@@ -229,6 +229,22 @@ void alignChannels(Config config, std::string affineIndex, std::vector<cv::Mat> 
   output[2] = output[2](cropSize);
 }
 
+cv::UMat mergeLeftRight(Config& config, const std::string& satellite, cv::UMat left, cv::UMat right) {
+  int width = left.cols + right.cols;
+  int height = std::max(left.rows, right.rows);
+  cv::UMat merged(height, width, left.type());
+
+  cv::Rect leftCrop = config.getROI(satellite + "VIS1");
+  cv::Rect rightCrop = config.getROI(satellite + "VIS2");
+
+  auto leftROI = left(leftCrop);
+  auto rightROI = right(rightCrop);
+  leftROI.copyTo(merged(cv::Rect(0, 0, leftROI.cols, leftROI.rows)));
+  rightROI.copyTo(merged(cv::Rect(leftROI.cols, 0, rightROI.cols, rightROI.rows)));
+
+  return merged;
+}
+
 
 int main(int argc, char** argv) {
   cv::ocl::setUseOpenCL(true);
@@ -326,21 +342,13 @@ int main(int argc, char** argv) {
 
     // Product.cbor is identical
     std::filesystem::path cborTarget = output_directory / "product.cbor";
-    if (std::filesystem::exists(cborTarget))
+    if (std::filesystem::exists(cborTarget)) {
       std::filesystem::remove(cborTarget);
+    }
 
     std::filesystem::copy(VIS1_directory / "product.cbor", cborTarget);
 
-    // Writes an NC if path was supplied
-    // TODOREWORK: Write out the NC from merged channels and not just one
-    if (NCPath != "") {
-      writeNaturalColor(VIS1_alignedChannels, NCPath);
-    }
-  }
-
-
-  // Same logic for VIS2...
-  {
+    // Same logic for VIS2...
     // Load VIS2 channels in
     std::vector<cv::Mat> VIS2_channels;
     cv::Mat VIS2_ch1 = cv::imread(VIS2_directory / "MSUGS-VIS-1.png", cv::IMREAD_GRAYSCALE); // R
@@ -375,6 +383,20 @@ int main(int argc, char** argv) {
 
       std::filesystem::copy(VIS1_directory / "product.cbor", cborTarget);
     }
+
+    auto mergedCH1 = mergeLeftRight(config, parameters.getSatellite(), VIS1_alignedChannels[0], VIS2_alignedChannels[0]);
+    auto mergedCH2 = mergeLeftRight(config, parameters.getSatellite(), VIS1_alignedChannels[1], VIS2_alignedChannels[1]);
+    auto mergedCH3 = mergeLeftRight(config, parameters.getSatellite(), VIS1_alignedChannels[2], VIS2_alignedChannels[2]);
+
+    // Writes an NC if path was supplied
+    // TODOREWORK: Write out the NC from merged channels and not just one
+    if (NCPath != "") {
+      std::vector<cv::UMat> merged{mergedCH1, mergedCH2, mergedCH3};
+      writeNaturalColor(merged, NCPath);
+    }
+
+    // config.setROI(parameters.getSatellite() + "VIS1", cv::Rect{21, 6, 5999, 13588});
+    // config.setROI(parameters.getSatellite() + "VIS2", cv::Rect{5, 0, 5968, 13954});
   }
 
   // TODOREWORK: Logic to merge MSUGS VIS2 can be added here
@@ -382,6 +404,8 @@ int main(int argc, char** argv) {
 
 
   /*
+    TODO: remove old unused code
+
     cv::UMat rgb;
     cv::imread("merged2.png").copyTo(rgb);
     std::vector<cv::UMat> channels;

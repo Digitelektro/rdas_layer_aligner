@@ -12,6 +12,9 @@ public:
   cv::Mat getTransformMatrix(const std::string& satellite, const std::string& channel);
   void setTransfromMatrix(const cv::Mat& matrix, const std::string& satellite, const std::string& channel);
 
+  cv::Rect getROI(const std::string& satellite);
+  void setROI(const std::string& satellite, const cv::Rect& rect);
+
 private:
   void load();
   void save();
