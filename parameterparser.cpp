@@ -1,5 +1,6 @@
 #include "parameterparser.h"
 
+#include <sstream>
 
 ParameterParser::ParameterParser() {
   mSettingsList.push_back(ParameterData("--help", "-h", "Print help")); // TODOREWORK: this is not iplemented
