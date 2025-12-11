@@ -11,11 +11,9 @@
 #include "imageproc.h"
 #include "opencv2/core/ocl.hpp"
 #include "parameterparser.h"
-// #include "tps.h"
 
 static constexpr int CH2_OFFSET = 3606;
 static constexpr int CH3_OFFSET = 1804;
-
 
 void valuesFromEuclidean(const cv::Mat& warp);
 std::tuple<cv::Mat, cv::Mat> calculateMatrix(cv::Mat reference, cv::Mat ch1, cv::Mat ch2);
@@ -36,12 +34,6 @@ std::tuple<cv::Mat, cv::Mat> calculateMatrix(cv::Mat reference, cv::Mat ch1, cv:
   ch2Thread.join();
   return {warpCh1, warpCh2};
 }
-
-/*std::tuple<cv::Mat, cv::Mat> loadMatrix(std::filesystem::path ch1Config, std::filesystem::path ch2Config) {
-  cv::Mat warpCh1 = Config::loadTransformMatrix(ch1Config);
-  cv::Mat warpCh2 = Config::loadTransformMatrix(ch2Config);
-  return {warpCh1, warpCh2};
-}*/
 
 void valuesFromAffine(const cv::Mat& warp, const std::string& prefix) {
   // Extract affine components
@@ -80,48 +72,6 @@ void valuesFromEuclidean(const cv::Mat& warp) {
   float theta_deg = theta_rad * 180.0 / CV_PI;
 
   std::cout << "dx = " << dx << "  dy = " << dy << "  rotation(rad/deg) = " << theta_rad << "/" << theta_deg << "°" << std::endl;
-}
-
-void oldStuff() {
-  /// Old stuff, thin plate spline
-  /*cv::Mat matchCh12;
-  cv::matchTemplate(ch1, ch2, matchCh12, 3);
-
-  cv::namedWindow("Aligned Image", cv::WINDOW_NORMAL);
-  cv::imshow("Aligned Image", matchCh12);
-  cv::resizeWindow("Aligned Image", {1024, 1024});
-  cv::waitKey();
-
-
-  auto transfomer =
-  cv::createThinPlateSplineShapeTransformer2("../kernels/tps.cl");
-  transfomer->estimateTransformation(pointsCh1, pointsCh2, matches);
-  transfomer->warpImage(ch1, alignedCh1);
-
-  pointsCh2.clear();
-  matches.clear();
-  for (size_t i = 0; i < matchesCh3Ch2.size(); i++) {
-      pointsCh3.push_back(keyPointsCh3[matchesCh3Ch2[i].queryIdx].pt);
-      pointsCh2.push_back(keyPointsCh2[matchesCh3Ch2[i].trainIdx].pt);
-      matches.push_back(cv::DMatch(i, i, 0));
-  }
-
-  transfomer = cv::createThinPlateSplineShapeTransformer2("../kernels/tps.cl");
-  transfomer->estimateTransformation(pointsCh3, pointsCh2, matches);
-  transfomer->warpImage(ch3, alignedCh3);
-
-
-
-  std::vector<cv::Mat> channels = {alignedCh1, ch2, alignedCh3};
-  cv::Mat result;
-  cv::merge(channels, result);
-  cv::imwrite("../MSU-GS/1.jpg", alignedCh1);
-  cv::imwrite("../MSU-GS/2.jpg", ch2);
-  cv::imwrite("../MSU-GS/3.jpg", alignedCh3);*/
-  // cv::imwrite("../MSU-GS/alligned.png", result);
-  // cv::imshow("Aligned Image", alignedCh3);
-  // cv::waitKey(0);
-  /// Old stuff end
 }
 
 /**
@@ -173,6 +123,7 @@ void findAffines(Config& config, const std::string& affineIndex, const std::vect
   config.setTransfromMatrix(ch3WarpMatrix, affineIndex, "CH3");
 }
 
+// Todo: this doesn't work yet
 void findOverlap(const cv::UMat& left, const cv::UMat& right) {
   int stripWidth = 200;
   cv::UMat strip = left(cv::Rect(left.cols - stripWidth, 0, stripWidth, left.rows));
@@ -410,80 +361,9 @@ int main(int argc, char** argv) {
     auto mergedCH3 = mergeLeftRight(config, parameters.getSatellite(), VIS1_alignedChannels[2], VIS2_alignedChannels[2]);
 
     // Writes an NC if path was supplied
-    // TODOREWORK: Write out the NC from merged channels and not just one
     if (NCPath != "") {
       std::vector<cv::UMat> merged{mergedCH1, mergedCH2, mergedCH3};
       writeNaturalColor(merged, NCPath);
     }
-
-    // config.setROI(parameters.getSatellite() + "VIS1", cv::Rect{21, 6, 5999, 13588});
-    // config.setROI(parameters.getSatellite() + "VIS2", cv::Rect{5, 0, 5968, 13954});
   }
-
-  // TODOREWORK: Logic to merge MSUGS VIS2 can be added here
-  // When done, remove save handling for the individual sides and just copy it once for the merged images
-
-
-  /*
-    TODO: remove old unused code
-
-    cv::UMat rgb;
-    cv::imread("merged2.png").copyTo(rgb);
-    std::vector<cv::UMat> channels;
-    cv::split(rgb, channels);
-
-
-    cv::Mat warp_matrix_ch1 = ImageProc::shiftImageMatrix(0, -1760);
-    cv::Mat warp_matrix_ch2 = ImageProc::shiftImageMatrix(0, -3565);
-    // std::tuple<cv::Mat, cv::Mat> warpMatrices{warp_matrix_ch1, warp_matrix_ch2};
-
-
-    // valuesFromAffine(warp_matrix_ch1, "CH2 ");
-    // valuesFromAffine(warp_matrix_ch2, "CH3 ");
-
-    // auto warpMatrices = calculateMatrix(channels[0], channels[1], channels[2]);
-    auto warpMatrices = loadMatrix("ch1.config", "ch2.config");
-
-
-    // Config::saveTransfromMatrix(std::get<0>(warpMatrices), "ch1.config");
-    // Config::saveTransfromMatrix(std::get<1>(warpMatrices), "ch2.config");
-
-    valuesFromAffine(std::get<0>(warpMatrices), "CH1 ");
-    // valuesFromAffine(std::get<1>(warpMatrices), "CH2 ");
-
-    // Storage for warped image.
-    cv::UMat ch1Alligned;
-    cv::warpAffine(channels[1], ch1Alligned, std::get<0>(warpMatrices), channels[1].size(), cv::INTER_LINEAR + cv::WARP_INVERSE_MAP);
-
-    cv::UMat ch2Alligned;
-    cv::warpAffine(channels[2], ch2Alligned, std::get<1>(warpMatrices), channels[2].size(), cv::INTER_LINEAR + cv::WARP_INVERSE_MAP);
-
-
-    cv::UMat merged;
-    std::vector<cv::UMat> allignedChannels;
-    allignedChannels.push_back(channels[0]);
-    allignedChannels.push_back(ch1Alligned);
-    allignedChannels.push_back(ch2Alligned);
-    cv::merge(allignedChannels, merged);
-
-    cv::imwrite("./merged4.png", merged);
-
-    const std::string winName = "Aligned Image";
-    cv::namedWindow(winName, cv::WINDOW_NORMAL);
-    cv::imshow(winName, merged);
-    cv::resizeWindow(winName, {1024, 1024});
-    // cv::waitKey();
-
-    // Loop until window closed
-    while (true) {
-      int key = cv::waitKey(30); // 30 ms delay between checks
-      if (cv::getWindowProperty(winName, cv::WND_PROP_VISIBLE) < 1) {
-        break; // window closed by user
-      }
-    }
-
-    cv::destroyAllWindows();
-
-    return 0;
-    */
 }

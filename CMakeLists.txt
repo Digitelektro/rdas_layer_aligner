@@ -18,10 +18,8 @@ find_package(jsoncpp CONFIG REQUIRED)
 add_executable(rdas_aligner
     main.cpp
     parameterparser.cpp
-    tps.cpp
     configstorage.cpp
     imageproc.cpp
-    opencl.cpp
 )
 
 include_directories(
