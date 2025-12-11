@@ -9,6 +9,9 @@
 class Config {
 public:
   Config(const std::filesystem::path& path);
+  Config(const Config& other) = delete;
+  Config& operator=(const Config& other) = delete;
+
   cv::Mat getTransformMatrix(const std::string& satellite, const std::string& channel);
   void setTransfromMatrix(const cv::Mat& matrix, const std::string& satellite, const std::string& channel);
 

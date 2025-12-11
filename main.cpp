@@ -131,7 +131,7 @@ void oldStuff() {
  * @param affineIndex Index to save affine values as
  * @param input 3 input channels to find the affines for
  */
-void findAffines(Config& config, std::string affineIndex, std::vector<cv::Mat> input) {
+void findAffines(Config& config, const std::string& affineIndex, const std::vector<cv::Mat>& input) {
 
   // Vertical offsets between channels on MSU-GS, consistent between all satellites
   auto ch2Shift = ImageProc::shiftImageMatrix(0, CH2_OFFSET);
@@ -173,13 +173,34 @@ void findAffines(Config& config, std::string affineIndex, std::vector<cv::Mat> i
   config.setTransfromMatrix(ch3WarpMatrix, affineIndex, "CH3");
 }
 
+void findOverlap(const cv::UMat& left, const cv::UMat& right) {
+  int stripWidth = 200;
+  cv::UMat strip = left(cv::Rect(left.cols - stripWidth, 0, stripWidth, left.rows));
+  cv::imwrite("test1.jpg", strip);
+
+  // ----- 2. Extract search region from right image -----
+  cv::UMat search = right(cv::Rect(0, 0, stripWidth, right.rows));
+  cv::imwrite("test2.jpg", search);
+
+  // ----- 3. Template match to find vertical shift -----
+  cv::UMat result;
+  cv::matchTemplate(search, strip, result, cv::TM_CCORR_NORMED);
+  cv::imwrite("result.jpg", search);
+
+  // result is (right.rows - left.rows + 1) tall, find best match
+  cv::Point best;
+  cv::minMaxLoc(result, nullptr, nullptr, nullptr, &best);
+
+  std::cout << "Offset=" << best << std::endl;
+}
+
 /**
  * @brief Writes out an NC from a vector of RGB channels
  *
  * @param channels R, G, B channels for the NC
  * @param outputPath File to write the NC to
  */
-void writeNaturalColor(std::vector<cv::UMat> channels, std::filesystem::path outputPath) {
+void writeNaturalColor(const std::vector<cv::UMat>& channels, const std::filesystem::path& outputPath) {
   cv::UMat RGB321Image;
   cv::merge(channels, RGB321Image);
 
@@ -204,7 +225,7 @@ void writeNaturalColor(std::vector<cv::UMat> channels, std::filesystem::path out
  * @param input Vector of 3 raw input channels
  * @param output Vector of 3 aligned output channels
  */
-void alignChannels(Config config, std::string affineIndex, std::vector<cv::Mat> input, std::vector<cv::UMat>& output) {
+void alignChannels(Config& config, const std::string& affineIndex, const std::vector<cv::Mat>& input, std::vector<cv::UMat>& output) {
 
   cv::Mat warpCh2 = config.getTransformMatrix(affineIndex, "CH2");
   cv::Mat warpCh3 = config.getTransformMatrix(affineIndex, "CH3");
@@ -229,7 +250,7 @@ void alignChannels(Config config, std::string affineIndex, std::vector<cv::Mat> 
   output[2] = output[2](cropSize);
 }
 
-cv::UMat mergeLeftRight(Config& config, const std::string& satellite, cv::UMat left, cv::UMat right) {
+cv::UMat mergeLeftRight(Config& config, const std::string& satellite, const cv::UMat& left, const cv::UMat& right) {
   int width = left.cols + right.cols;
   int height = std::max(left.rows, right.rows);
   cv::UMat merged(height, width, left.type());
