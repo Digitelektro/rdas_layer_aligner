@@ -32,12 +32,11 @@ Usage:
 
 ## Example outputs
 
-Note: images are hue corrected and contrast adjusted after the processing
 ### Elektro L3
-![Elektro-L3](img/elektro-L3-hue_corrected_321.jpg)
+![Elektro-L3](img/elektro_l3_msugs_vis_Natural_Color.jpg)
 
 ### Elektro L2
-![Elektro-L3](img/elektro-L2-hue_corrected_321.jpg)
+![Elektro-L3](img/elektro_l2_msugs_vis_Natural_Color.jpg)
 
 ### Arktika-M2
-![Arktika-M2](img/arktika-M2-hue_corrected_321.jpg)
+![Arktika-M2](img/arktika_m2_msugs_vis_Natural_Color.jpg)
