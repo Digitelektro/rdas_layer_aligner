@@ -45,6 +45,11 @@ void Config::setTransfromMatrix(const cv::Mat& matrix, const std::string& satell
   save();
 }
 
+bool Config::ROIExists(const std::string& key) {
+  const Json::Value& sat = mJsonConfig[key];
+  return sat.isMember("ROI");
+}
+
 cv::Rect Config::getROI(const std::string& satellite) {
   auto roi = mJsonConfig[satellite]["ROI"];
   return cv::Rect{roi["x"].asInt(), roi["y"].asInt(), roi["width"].asInt(), roi["height"].asInt()};

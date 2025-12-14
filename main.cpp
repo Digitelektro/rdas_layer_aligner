@@ -284,23 +284,22 @@ int main(int argc, char** argv) {
     throw std::runtime_error("You didn't point to a live-decoded RDAS directory! No MSUGS-VIS1 and/or MSUGS-VIS2 folders were found");
   }
 
-
+  std::cout << "Aligning VIS1..." << std::endl;
   std::vector<cv::Mat> VIS1_channels;
   std::vector<cv::UMat> VIS1_alignedChannels;
 
-  cv::Mat ch1 = cv::imread(VIS1_directory / "MSUGS-VIS-1.png", cv::IMREAD_GRAYSCALE); // R
-  cv::Mat ch2 = cv::imread(VIS1_directory / "MSUGS-VIS-2.png", cv::IMREAD_GRAYSCALE); // G
-  cv::Mat ch3 = cv::imread(VIS1_directory / "MSUGS-VIS-3.png", cv::IMREAD_GRAYSCALE); // B
+  cv::Mat VIS1_ch1 = cv::imread(VIS1_directory / "MSUGS-VIS-1.png", cv::IMREAD_GRAYSCALE); // R
+  cv::Mat VIS1_ch2 = cv::imread(VIS1_directory / "MSUGS-VIS-2.png", cv::IMREAD_GRAYSCALE); // G
+  cv::Mat VIS3_ch3 = cv::imread(VIS1_directory / "MSUGS-VIS-3.png", cv::IMREAD_GRAYSCALE); // B
 
-  VIS1_channels.push_back(ch1);
-  VIS1_channels.push_back(ch2);
-  VIS1_channels.push_back(ch3);
+  VIS1_channels.push_back(VIS1_ch1);
+  VIS1_channels.push_back(VIS1_ch2);
+  VIS1_channels.push_back(VIS3_ch3);
 
   alignChannels(config, parameters.getSatellite() + "VIS1", VIS1_channels, VIS1_alignedChannels);
 
 
-  // Same logic for VIS2...
-  // Load VIS2 channels in
+  std::cout << "Aligning VIS2..." << std::endl;
   std::vector<cv::Mat> VIS2_channels;
   std::vector<cv::UMat> VIS2_alignedChannels;
 
@@ -314,6 +313,59 @@ int main(int argc, char** argv) {
 
   alignChannels(config, parameters.getSatellite() + "VIS2", VIS2_channels, VIS2_alignedChannels);
 
+  // Can we merge?
+  if (!config.ROIExists(parameters.getSatellite() + "VIS1") || !config.ROIExists(parameters.getSatellite() + "VIS2")) {
+    std::cout << "Merge parameters aren't available for the chosen satellite! Saving aligned VIS channels separately instead..." << std::endl;
+
+    // VIS1
+    {
+      std::filesystem::path output_directory = RDASDirectory / "MSUGS_VIS-1_Aligned";
+      if (!std::filesystem::exists(output_directory))
+        std::filesystem::create_directory(output_directory);
+
+      std::cout << "Saving VIS1..." << std::endl;
+      cv::imwrite(output_directory / "MSUGS-VIS-1.png", VIS1_channels[0]);
+      cv::imwrite(output_directory / "MSUGS-VIS-2.png", VIS1_channels[1]);
+      cv::imwrite(output_directory / "MSUGS-VIS-3.png", VIS1_channels[2]);
+
+      // Product.cbor is identical due to the lack of calibration
+      std::filesystem::path cborTarget = output_directory / "product.cbor";
+
+      // overwrite if it already exists
+      if (std::filesystem::exists(cborTarget))
+        std::filesystem::remove(cborTarget);
+
+      std::filesystem::copy(VIS1_directory / "product.cbor", cborTarget);
+
+      std::cout << "Finished saving VIS1 products! CBOR saved at: " << cborTarget << std::endl;
+    }
+    // VIS2
+    {
+      std::filesystem::path output_directory = RDASDirectory / "MSUGS_VIS-2_Aligned";
+      if (!std::filesystem::exists(output_directory))
+        std::filesystem::create_directory(output_directory);
+
+      std::cout << "Saving VIS2..." << std::endl;
+      cv::imwrite(output_directory / "MSUGS-VIS-1.png", VIS2_channels[0]);
+      cv::imwrite(output_directory / "MSUGS-VIS-2.png", VIS2_channels[1]);
+      cv::imwrite(output_directory / "MSUGS-VIS-3.png", VIS2_channels[2]);
+
+      // Product.cbor is identical due to the lack of calibration
+      std::filesystem::path cborTarget = output_directory / "product.cbor";
+
+      // overwrite if it already exists
+      if (std::filesystem::exists(cborTarget))
+        std::filesystem::remove(cborTarget);
+
+      std::filesystem::copy(VIS1_directory / "product.cbor", cborTarget);
+
+      std::cout << "Finished saving VIS2 products! CBOR saved at: " << cborTarget << std::endl;
+    }
+
+    return 0;
+  }
+
+  std::cout << "Merge parameters were found, creating merged products..." << std::endl;
 
   // Merge channels
   auto mergedCH1 = mergeLeftRight(config, parameters.getSatellite(), VIS1_alignedChannels[0], VIS2_alignedChannels[0]);
@@ -327,6 +379,7 @@ int main(int argc, char** argv) {
   if (!std::filesystem::exists(output_directory))
     std::filesystem::create_directory(output_directory);
 
+  std::cout << "Saving..." << std::endl;
   cv::imwrite(output_directory / "MSUGS-VIS-1.png", mergedCH1);
   cv::imwrite(output_directory / "MSUGS-VIS-2.png", mergedCH2);
   cv::imwrite(output_directory / "MSUGS-VIS-3.png", mergedCH3);
@@ -335,15 +388,20 @@ int main(int argc, char** argv) {
   std::filesystem::path cborTarget = output_directory / "product.cbor";
 
   // overwrite if it already exists
-  if (std::filesystem::exists(cborTarget)) {
+  if (std::filesystem::exists(cborTarget))
     std::filesystem::remove(cborTarget);
-  }
 
   std::filesystem::copy(VIS1_directory / "product.cbor", cborTarget);
 
+  std::cout << "Finished saving merged products! CBOR saved at: " << cborTarget << std::endl;
+
   // Writes an NC if a path was supplied
   if (NCPath != "") {
+    std::cout << "Saving NC..." << std::endl;
+
     std::vector<cv::UMat> merged{mergedCH1, mergedCH2, mergedCH3};
     writeNaturalColor(merged, NCPath);
+
+    std::cout << "Natural color has been written to " << NCPath << std::endl;
   }
 }
