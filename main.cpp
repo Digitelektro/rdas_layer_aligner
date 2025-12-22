@@ -244,9 +244,9 @@ int main(int argc, char** argv) {
     // VIS1
     std::vector<cv::Mat> VIS1_channels;
 
-    cv::Mat VIS1_ch1 = cv::imread(RDASDirectory / "MSUGS_VIS1" / "MSUGS-VIS-1.png", cv::IMREAD_UNCHANGED); // R
-    cv::Mat VIS1_ch2 = cv::imread(RDASDirectory / "MSUGS_VIS1" / "MSUGS-VIS-2.png", cv::IMREAD_UNCHANGED); // G
-    cv::Mat VIS1_ch3 = cv::imread(RDASDirectory / "MSUGS_VIS1" / "MSUGS-VIS-3.png", cv::IMREAD_UNCHANGED); // B
+    cv::Mat VIS1_ch1 = cv::imread(RDASDirectory / "MSUGS_VIS1" / "MSUGS-VIS-1.png", cv::IMREAD_GRAYSCALE); // R
+    cv::Mat VIS1_ch2 = cv::imread(RDASDirectory / "MSUGS_VIS1" / "MSUGS-VIS-2.png", cv::IMREAD_GRAYSCALE); // G
+    cv::Mat VIS1_ch3 = cv::imread(RDASDirectory / "MSUGS_VIS1" / "MSUGS-VIS-3.png", cv::IMREAD_GRAYSCALE); // B
 
     VIS1_channels.push_back(VIS1_ch1);
     VIS1_channels.push_back(VIS1_ch2);
@@ -257,9 +257,9 @@ int main(int argc, char** argv) {
     // VIS2
     std::vector<cv::Mat> VIS2_channels;
 
-    cv::Mat VIS2_ch1 = cv::imread(RDASDirectory / "MSUGS_VIS2" / "MSUGS-VIS-1.png", cv::IMREAD_UNCHANGED); // R
-    cv::Mat VIS2_ch2 = cv::imread(RDASDirectory / "MSUGS_VIS2" / "MSUGS-VIS-2.png", cv::IMREAD_UNCHANGED); // G
-    cv::Mat VIS2_ch3 = cv::imread(RDASDirectory / "MSUGS_VIS2" / "MSUGS-VIS-3.png", cv::IMREAD_UNCHANGED); // B
+    cv::Mat VIS2_ch1 = cv::imread(RDASDirectory / "MSUGS_VIS2" / "MSUGS-VIS-1.png", cv::IMREAD_GRAYSCALE); // R
+    cv::Mat VIS2_ch2 = cv::imread(RDASDirectory / "MSUGS_VIS2" / "MSUGS-VIS-2.png", cv::IMREAD_GRAYSCALE); // G
+    cv::Mat VIS2_ch3 = cv::imread(RDASDirectory / "MSUGS_VIS2" / "MSUGS-VIS-3.png", cv::IMREAD_GRAYSCALE); // B
 
     VIS2_channels.push_back(VIS2_ch1);
     VIS2_channels.push_back(VIS2_ch2);
