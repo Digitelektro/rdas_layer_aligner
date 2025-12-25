@@ -13,7 +13,7 @@ Config::Config(const std::filesystem::path& path)
 
 cv::Mat Config::getTransformMatrix(const std::string& index, const std::string& channel) {
   if (mJsonConfig[index].isNull() == true) {
-    throw std::runtime_error("Selected index '" + index + "' config doesn't exist! Did you copy config from the repo's root directory? Is the satellite selected properly? (-s L2|L3|4|M1|M2)");
+    throw std::runtime_error("Selected index '" + index + "' config doesn't exist! Did you copy config from the repo's root directory? Is the satellite selected properly? (-s L2|L3|L4|M1|M2)");
   }
 
   auto satConf = mJsonConfig[index];
