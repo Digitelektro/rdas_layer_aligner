@@ -40,4 +40,4 @@ Usage:
 ![Elektro-L3](img/elektro_l2_msugs_vis_Natural_Color.jpg)
 
 ### Arktika-M1
-![Arktika-M1](img/arktika_m2_msugs_vis_Natural_Color.jpg)
+![Arktika-M1](img/arktika_m1_msugs_vis_Natural_Color.jpg)
